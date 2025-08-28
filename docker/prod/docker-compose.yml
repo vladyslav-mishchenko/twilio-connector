@@ -1,0 +1,42 @@
+services:
+  certbot:
+    stdin_open: true
+    tty: true
+    build:
+      context: ../../
+      dockerfile: docker/prod/certbot.Dockerfile
+    image: twilio-connector-certbot:latest
+    container_name: twilio-connector-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      - nginx
+      
+  nginx:
+    build:
+      context: ../../
+      dockerfile: docker/prod/nginx.Dockerfile
+    image: twilio-connector-nginx:latest
+    container_name: twilio-connector-nginx
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - flask
+
+  flask:
+    build:
+      context: ../../
+      dockerfile: docker/prod/flask.Dockerfile
+    image: twilio-connector:latest
+    container_name: twilio-connector
+
+
+
+volumes:
+  certbot-etc:
+  certbot-www:

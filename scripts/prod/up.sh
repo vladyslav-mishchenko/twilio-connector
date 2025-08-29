@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cd ../../docker/prod
-docker compose up
+docker compose up -d

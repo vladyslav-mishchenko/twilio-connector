@@ -1,5 +1,5 @@
 services:
-  django:
+  flask:
     stdin_open: true
     tty: true
     build:
@@ -7,8 +7,8 @@ services:
       dockerfile: docker/dev/flask.Dockerfile
     env_file:
       - ../../env/dev/.env
-    image: twilio-connector-dev:latest
-    container_name: twilio-connector-dev
+    image: twilio-connector-flask-dev:latest
+    container_name: twilio-connector-flask-dev
     volumes:
       - ../../app:/app
     ports:

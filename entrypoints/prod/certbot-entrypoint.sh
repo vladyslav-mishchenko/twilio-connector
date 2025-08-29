@@ -3,6 +3,6 @@
 set -e
 
 echo "CERTBOT ENTRYPOINT"
-source /etc/certbot/certbot-env.sh
+# source /etc/certbot/certbot-env.sh
 
 exec "$@"

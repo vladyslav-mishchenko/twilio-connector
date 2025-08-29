@@ -4,8 +4,7 @@ set -e
 
 echo "[Certbot] Starting certificate process..."
 
-# passed in entrypoint
-# source /etc/certbot/certbot-env.sh
+source /etc/certbot/certbot-env.sh
 
 # Check required environment variables
 : "${CERTBOT_EMAIL?Need to set CERTBOT_EMAIL}"

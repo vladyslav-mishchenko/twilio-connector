@@ -32,11 +32,9 @@ services:
     build:
       context: ../../
       dockerfile: docker/prod/flask.Dockerfile
-    image: twilio-connector:latest
-    container_name: twilio-connector
-
-
-
+    image: twilio-connector-flask:latest
+    container_name: twilio-connector-flask
+    
 volumes:
   certbot-etc:
   certbot-www:

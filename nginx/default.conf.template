@@ -5,6 +5,11 @@ server {
 
     client_max_body_size 25M;
 
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
     location / {
         proxy_pass http://flask:8080;
         proxy_set_header Host $host;

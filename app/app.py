@@ -1,7 +1,19 @@
-from flask import Flask, jsonify, request, Response, render_template
+import os
+import logging
+
+import requests
+from requests.auth import HTTPBasicAuth
+
+from flask import Flask, jsonify, request, Response, render_template, make_response
+
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Dial
-import os
+
+from call_statuses.outgoing import initiated
+from call_statuses.outgoing import ringing
+from call_statuses.outgoing import busy
+from call_statuses.outgoing import in_progress
+from call_statuses.outgoing import completed
 
 # APP
 APP_HOST = os.getenv("APP_HOST") or "Not found"
@@ -17,6 +29,9 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN") or "Not found"
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER") or "Not found"
 SIP_CLIENT_ADDRESS = os.getenv("SIP_CLIENT_ADDRESS") or "Not found"
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 app = Flask(__name__)
 
@@ -44,33 +59,35 @@ def outgoing_call():
     - Initiates a call to the specified phone number.
 
     Returns:
-        Response: JSON response indicating success or failure.
-            - On success: {"status": "success", "message": "Call accepted"} with HTTP 200.
-            - On failure: {"error": <error message>} with HTTP 500.
+
     """
 
     form_data = request.form
     data = form_data.to_dict()
+
     to_number = data.get("to")
-    # from_name = data.get("from")
+    from_number = data.get("from")
+    cmd = data.get("cmd")
 
-    print(data)
+    if cmd == "makeCall":
+        try:
+            call = client.calls.create(
+                to=SIP_CLIENT_ADDRESS,
+                from_=TWILIO_NUMBER,
+                url=f"{APP_HOST}/twilio/outgoing/twiml?to={to_number}",
+                status_callback=f"{APP_HOST}/twilio/outgoing/status",
+                status_callback_method="POST",
+                status_callback_event=["initiated", "ringing", "answered", "completed"],
+            )
 
-    try:
-        call = client.calls.create(
-            to=SIP_CLIENT_ADDRESS,
-            from_=TWILIO_NUMBER,
-            url=f"{APP_HOST}/twilio/outgoing/twiml?to={to_number}",
-            status_callback=f"{APP_HOST}/twilio/outgoing/status",
-            status_callback_method="POST",
-            status_callback_event=["initiated", "ringing", "answered", "completed"],
-        )
+            logging.info(f"Call to SIP initiated. Call SID: {call.sid}")
 
-        print(f"Call to SIP initiated. Call SID: {call.sid}")
+            return make_response("", 200)
+        except Exception:
+            return make_response(jsonify(error="Invalid parameters"), 400)
 
-        return jsonify({"status": "success", "message": "Call accepted"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if cmd == "setup":
+        return make_response("", 200)
 
 
 @app.route("/twilio/outgoing/twiml", methods=["POST"])
@@ -88,8 +105,6 @@ def outgoing_twiml():
     Returns:
         Response: An XML response containing TwiML instructions for the call.
     """
-
-    print("outgoing call twiml")
 
     response = VoiceResponse()
     destination_number = request.args.get("to")
@@ -148,7 +163,6 @@ def incoming_call():
         return jsonify({"status": "received"}), 200
 
     except Exception as e:
-        print("Error handling incoming call:", str(e))
         return jsonify({"error": str(e)}), 500
 
 
@@ -164,16 +178,41 @@ def outgoing_call_status():
         Response: HTTP 200
     """
 
-    call_sid = request.form.get("CallSid")
-    call_status = request.form.get("CallStatus")
-    from_number = request.form.get("From")
-    to_number = request.form.get("To")
+    request_form_data = request.form
+    form_data = request_form_data.to_dict()
 
-    print("--------------------------------------")
-    print(f"Status: {call_status}")
-    print(f"From: {from_number} → To: {to_number}")
-    print(f"SID: {call_sid}")
-    print("--------------------------------------")
+    call_status = form_data.get("CallStatus")
+
+    call_data = {
+        "from_number": form_data.get("From"),
+        "call_sid": form_data.get("CallSid"),
+        "planfix_api_url": PANFIX_API_URL,
+        "planfix_auth_key": PANFIX_AUTH_KEY,
+    }
+
+    if call_status == "initiated":
+        initiated(call_data)
+
+    if call_status == "ringing":
+        ringing(call_data)
+
+    if call_status == "busy":
+        busy(call_data)
+
+    if call_status == "in-progress":
+        in_progress(call_data)
+
+    if call_status == "completed":
+        call_sid = form_data.get("CallSid")
+
+        recordings = client.calls(call_sid).recordings.list()
+
+        for recording in recordings:
+            recording_sid = recording.sid
+            recording_url = f"{APP_HOST}/recording/{recording_sid}.mp3"
+            call_data.update({"record_link": recording_url})
+
+        completed(call_data)
 
     return Response("OK", status=200)
 
@@ -188,3 +227,21 @@ def incoming_call_status():
     """
 
     pass
+
+
+@app.route("/recording/<recording_sid>.mp3")
+def proxy_recording(recording_sid):
+    twilio_url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Recordings/{recording_sid}.mp3"
+
+    twilio_response = requests.get(
+        twilio_url,
+        auth=HTTPBasicAuth(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+        stream=True,
+    )
+
+    if twilio_response.status_code == 200:
+        return Response(
+            twilio_response.iter_content(chunk_size=1024), content_type="audio/mpeg"
+        )
+    else:
+        return f"Error: {twilio_response.status_code}", twilio_response.status_code

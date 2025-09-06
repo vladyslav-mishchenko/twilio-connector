@@ -1,6 +1,8 @@
 import os
 import logging
 
+import redis
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -9,11 +11,19 @@ from flask import Flask, jsonify, request, Response, render_template, make_respo
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
-from call_statuses.outgoing import initiated
-from call_statuses.outgoing import ringing
-from call_statuses.outgoing import busy
-from call_statuses.outgoing import in_progress
-from call_statuses.outgoing import completed
+from call_statuses.outgoing import outgoing_call_initiated
+from call_statuses.outgoing import outgoing_call_ringing
+from call_statuses.outgoing import outgoing_call_busy
+from call_statuses.outgoing import outgoing_call_in_progress
+from call_statuses.outgoing import outgoing_call_completed
+
+from call_statuses.incoming import incoming_call_ringing
+from call_statuses.incoming import incoming_call_failed
+from call_statuses.incoming import incoming_call_busy
+from call_statuses.incoming import incoming_call_no_answer
+from call_statuses.incoming import incoming_call_completed
+
+r = redis.Redis(host="redis", port=6379, db=0, decode_responses=True)
 
 # APP
 APP_HOST = os.getenv("APP_HOST") or "Not found"
@@ -62,19 +72,26 @@ def outgoing_call():
 
     """
 
+    r.flushdb()
+
     form_data = request.form
     data = form_data.to_dict()
 
     to_number = data.get("to")
-    from_number = data.get("from")
+    ext = data.get("from")
     cmd = data.get("cmd")
 
     if cmd == "makeCall":
+
+        r.set("ext_name", ext)
+        r.set("destination_number", to_number)
+        r.set("twilio_number", TWILIO_NUMBER)
+
         try:
             call = client.calls.create(
                 to=SIP_CLIENT_ADDRESS,
                 from_=TWILIO_NUMBER,
-                url=f"{APP_HOST}/twilio/outgoing/twiml?to={to_number}",
+                url=f"{APP_HOST}/twilio/outgoing/twiml",
                 status_callback=f"{APP_HOST}/twilio/outgoing/status",
                 status_callback_method="POST",
                 status_callback_event=["initiated", "ringing", "answered", "completed"],
@@ -107,7 +124,7 @@ def outgoing_twiml():
     """
 
     response = VoiceResponse()
-    destination_number = request.args.get("to")
+    destination_number = r.get("destination_number")
 
     dial = Dial(
         answer_on_bridge=True,
@@ -120,6 +137,66 @@ def outgoing_twiml():
     response.append(dial)
 
     return Response(str(response), mimetype="text/xml")
+
+
+@app.route("/twilio/outgoing/status", methods=["POST"])
+def outgoing_call_status():
+    """
+    Handle Twilio status callbacks for outgoing calls.
+
+    This endpoint receives POST requests from Twilio containing updates
+    about the status of an outgoing call.
+
+    Returns:
+        Response: HTTP 200
+    """
+
+    ext_name = r.get("ext_name")
+    destination_number = r.get("destination_number")
+
+    request_form_data = request.form
+    form_data = request_form_data.to_dict()
+
+    # print(form_data)
+
+    call_status = form_data.get("CallStatus")
+
+    call_data = {
+        "from_number": form_data.get("From"),
+        "call_sid": form_data.get("CallSid"),
+        "phone": destination_number,
+        "ext": ext_name,
+        "planfix_api_url": PANFIX_API_URL,
+        "planfix_auth_key": PANFIX_AUTH_KEY,
+    }
+
+    if call_status == "initiated":
+        outgoing_call_initiated(call_data)
+
+    if call_status == "ringing":
+        outgoing_call_ringing(call_data)
+
+    if call_status == "busy":
+        outgoing_call_busy(call_data)
+
+    if call_status == "in-progress":
+        outgoing_call_in_progress(call_data)
+
+    if call_status == "completed":
+        call_sid = form_data.get("CallSid")
+
+        recordings = client.calls(call_sid).recordings.list()
+
+        for recording in recordings:
+            recording_sid = recording.sid
+            recording_url = f"{APP_HOST}/recording/{recording_sid}.mp3"
+
+            call_data.update({"record": "1"})
+            call_data.update({"record_link": recording_url})
+
+        outgoing_call_completed(call_data)
+
+    return Response("OK", status=200)
 
 
 @app.route("/incoming-call", methods=["POST"])
@@ -144,6 +221,10 @@ def incoming_call():
             - On failure: {"error": <error message>} with HTTP 400 or 500.
     """
 
+    # print("----------------------incoming-call")
+    # print(request.form.to_dict())
+    # print("-----------------------------------")
+
     try:
         data = request.get_json()
         if not data:
@@ -154,67 +235,34 @@ def incoming_call():
         call_sid = data.get("callSid")
         call_status = data.get("callStatus")
 
-        print("Incoming call info:")
-        print(f"  From       : {from_number}")
-        print(f"  To         : {to_number}")
-        print(f"  CallSid    : {call_sid}")
-        print(f"  CallStatus : {call_status}")
+        call_data = {
+            # "from_number": form_data.get("From"),
+            # "call_sid": form_data.get("CallSid"),
+            # "phone": destination_number,
+            # "ext": ext_name,
+            # "planfix_api_url": PANFIX_API_URL,
+            # "planfix_auth_key": PANFIX_AUTH_KEY,
+        }
+
+        if call_status == "ringing":
+            incoming_call_ringing(call_data)
+
+        # print("----------------------incoming-call")
+        # print(data)
+        # print("-----------------------------------")
+
+        # print("-----------------------------------")
+        # print("Incoming call info:")
+        # print(f"  From       : {from_number}")
+        # print(f"  To         : {to_number}")
+        # print(f"  CallSid    : {call_sid}")
+        # print(f"  CallStatus : {call_status}")
+        # print("-----------------------------------")
 
         return jsonify({"status": "received"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@app.route("/twilio/outgoing/status", methods=["POST"])
-def outgoing_call_status():
-    """
-    Handle Twilio status callbacks for outgoing calls.
-
-    This endpoint receives POST requests from Twilio containing updates
-    about the status of an outgoing call.
-
-    Returns:
-        Response: HTTP 200
-    """
-
-    request_form_data = request.form
-    form_data = request_form_data.to_dict()
-
-    call_status = form_data.get("CallStatus")
-
-    call_data = {
-        "from_number": form_data.get("From"),
-        "call_sid": form_data.get("CallSid"),
-        "planfix_api_url": PANFIX_API_URL,
-        "planfix_auth_key": PANFIX_AUTH_KEY,
-    }
-
-    if call_status == "initiated":
-        initiated(call_data)
-
-    if call_status == "ringing":
-        ringing(call_data)
-
-    if call_status == "busy":
-        busy(call_data)
-
-    if call_status == "in-progress":
-        in_progress(call_data)
-
-    if call_status == "completed":
-        call_sid = form_data.get("CallSid")
-
-        recordings = client.calls(call_sid).recordings.list()
-
-        for recording in recordings:
-            recording_sid = recording.sid
-            recording_url = f"{APP_HOST}/recording/{recording_sid}.mp3"
-            call_data.update({"record_link": recording_url})
-
-        completed(call_data)
-
-    return Response("OK", status=200)
 
 
 @app.route("/twilio/incoming/status", methods=["POST"])
@@ -223,10 +271,34 @@ def incoming_call_status():
     Handle Twilio status callbacks for incoming calls.
 
     Returns:
-        Response: HTTP 200.
+        Response: HTTP 204.
     """
 
-    pass
+    call_sid = request.form.get("CallSid")
+    dial_call_status = request.form.get("DialCallStatus")
+    dial_call_duration = request.form.get("DialCallDuration")
+
+    if dial_call_status == "failed":
+        incoming_call_failed()
+
+    if dial_call_status == "busy":
+        incoming_call_busy()
+
+    if dial_call_status == "no-answer":
+        incoming_call_no_answer()
+
+    if dial_call_status == "completed":
+        incoming_call_completed()
+
+    # print("--------------------incomint/status")
+    # print(request.form.to_dict())
+    # print("-----------------------------------")
+
+    # print("-----------------------------------")
+    # print(f"{call_sid} → {dial_call_status} ({dial_call_duration}s)")
+    # print("-----------------------------------")
+
+    return ("", 204)
 
 
 @app.route("/recording/<recording_sid>.mp3")

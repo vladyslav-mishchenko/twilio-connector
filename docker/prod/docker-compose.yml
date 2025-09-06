@@ -34,6 +34,12 @@ services:
       dockerfile: docker/prod/flask.Dockerfile
     image: twilio-connector-flask:latest
     container_name: twilio-connector-flask
+  
+  redis:
+    image: redis:7-alpine
+    container_name: twilio-connector-redis
+    ports:
+      - "6379:6379"
     
 volumes:
   certbot-etc:

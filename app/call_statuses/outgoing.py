@@ -115,7 +115,6 @@ def outgoing_call_completed(data):
         "diversion": data["from_number"],
         "ext": data["ext"],
         "callid": data["call_sid"],
-        "duration": "",
         "status": "Success",
         "planfix_token": data["planfix_auth_key"],
         "data_utm_source": "",
@@ -129,6 +128,9 @@ def outgoing_call_completed(data):
 
     if "record_link" in data:
         completed_data.update({"record_link": data["record_link"]})
+
+    if "duration" in data:
+        completed_data.update({"duration": data["duration"]})
 
     url = data["planfix_api_url"]
 

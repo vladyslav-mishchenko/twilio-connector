@@ -30,6 +30,7 @@ APP_HOST = os.getenv("APP_HOST") or "Not found"
 APP_TOKEN = os.getenv("APP_TOKEN") or "Not found"
 
 # PLANFIX
+PLANFIX_USER = os.getenv("PLANFIX_USER") or "Not found"
 PANFIX_API_URL = os.getenv("PANFIX_API_URL") or "Not found"
 PANFIX_AUTH_KEY = os.getenv("PANFIX_AUTH_KEY") or "Not found"
 
@@ -157,9 +158,8 @@ def outgoing_call_status():
     request_form_data = request.form
     form_data = request_form_data.to_dict()
 
-    # print(form_data)
-
     call_status = form_data.get("CallStatus")
+    call_duration = form_data.get("CallDuration")
 
     call_data = {
         "from_number": form_data.get("From"),
@@ -193,6 +193,7 @@ def outgoing_call_status():
 
             call_data.update({"record": "1"})
             call_data.update({"record_link": recording_url})
+            call_data.update({"duration": call_duration})
 
         outgoing_call_completed(call_data)
 
@@ -221,10 +222,6 @@ def incoming_call():
             - On failure: {"error": <error message>} with HTTP 400 or 500.
     """
 
-    # print("----------------------incoming-call")
-    # print(request.form.to_dict())
-    # print("-----------------------------------")
-
     try:
         data = request.get_json()
         if not data:
@@ -236,28 +233,16 @@ def incoming_call():
         call_status = data.get("callStatus")
 
         call_data = {
-            # "from_number": form_data.get("From"),
-            # "call_sid": form_data.get("CallSid"),
-            # "phone": destination_number,
-            # "ext": ext_name,
-            # "planfix_api_url": PANFIX_API_URL,
-            # "planfix_auth_key": PANFIX_AUTH_KEY,
+            "from": from_number,
+            "call_sid": call_sid,
+            "to": to_number,
+            "ext": PLANFIX_USER,
+            "planfix_api_url": PANFIX_API_URL,
+            "planfix_auth_key": PANFIX_AUTH_KEY,
         }
 
         if call_status == "ringing":
             incoming_call_ringing(call_data)
-
-        # print("----------------------incoming-call")
-        # print(data)
-        # print("-----------------------------------")
-
-        # print("-----------------------------------")
-        # print("Incoming call info:")
-        # print(f"  From       : {from_number}")
-        # print(f"  To         : {to_number}")
-        # print(f"  CallSid    : {call_sid}")
-        # print(f"  CallStatus : {call_status}")
-        # print("-----------------------------------")
 
         return jsonify({"status": "received"}), 200
 
@@ -274,29 +259,45 @@ def incoming_call_status():
         Response: HTTP 204.
     """
 
+    from_number = request.form.get("From")
+    to_number = request.form.get("To")
     call_sid = request.form.get("CallSid")
     dial_call_status = request.form.get("DialCallStatus")
     dial_call_duration = request.form.get("DialCallDuration")
 
+    call_data = {
+        "from": from_number,
+        "call_sid": call_sid,
+        "to": to_number,
+        "ext": PLANFIX_USER,
+        "planfix_api_url": PANFIX_API_URL,
+        "planfix_auth_key": PANFIX_AUTH_KEY,
+    }
+
     if dial_call_status == "failed":
-        incoming_call_failed()
+        incoming_call_failed(call_data)
 
     if dial_call_status == "busy":
-        incoming_call_busy()
+        incoming_call_busy(call_data)
 
     if dial_call_status == "no-answer":
-        incoming_call_no_answer()
+        incoming_call_no_answer(call_data)
 
     if dial_call_status == "completed":
-        incoming_call_completed()
 
-    # print("--------------------incomint/status")
-    # print(request.form.to_dict())
-    # print("-----------------------------------")
+        call_sid = request.form.get("CallSid")
 
-    # print("-----------------------------------")
-    # print(f"{call_sid} → {dial_call_status} ({dial_call_duration}s)")
-    # print("-----------------------------------")
+        recordings = client.calls(call_sid).recordings.list()
+
+        for recording in recordings:
+            recording_sid = recording.sid
+            recording_url = f"{APP_HOST}/recording/{recording_sid}.mp3"
+
+            call_data.update({"record": "1"})
+            call_data.update({"record_link": recording_url})
+            call_data.update({"duration": dial_call_duration})
+
+        incoming_call_completed(call_data)
 
     return ("", 204)
 

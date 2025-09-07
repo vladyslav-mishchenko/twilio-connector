@@ -5,7 +5,7 @@ export APP_HOST=""
 export APP_TOKEN=""
 
 # PLANFIX
-PLANFIX_USER=""
+export PLANFIX_USER=""
 export PANFIX_API_URL=""
 export PANFIX_AUTH_KEY=""
 

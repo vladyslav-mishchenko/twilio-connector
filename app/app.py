@@ -82,10 +82,6 @@ def outgoing_call():
     ext = data.get("from")
     cmd = data.get("cmd")
 
-    print("--------------------------start")
-    print(form_data)
-    print("-------------------------------")
-
     if cmd == "makeCall":
 
         r.set("ext_name", ext)
@@ -165,10 +161,6 @@ def outgoing_call_status():
     call_status = form_data.get("CallStatus")
     call_duration = form_data.get("CallDuration")
 
-    print("--------------------------status")
-    print(call_status)
-    print("--------------------------------")
-
     call_data = {
         "from_number": form_data.get("From"),
         "call_sid": form_data.get("CallSid"),
@@ -177,10 +169,6 @@ def outgoing_call_status():
         "planfix_api_url": PANFIX_API_URL,
         "planfix_auth_key": PANFIX_AUTH_KEY,
     }
-
-    print("--------------------------call data")
-    print(call_data)
-    print("--------------------------------")
 
     if call_status == "initiated":
         outgoing_call_initiated(call_data)

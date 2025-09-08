@@ -138,6 +138,10 @@ def outgoing_call_completed(data):
 
     url = data["planfix_api_url"]
 
+    print("-------------------------------initiated")
+    print(completed_data)
+    print("----------------------------------------")
+
     try:
         requests.post(url, data=completed_data)
     except Exception as e:

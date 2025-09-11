@@ -29,15 +29,17 @@ r = redis.Redis(host="redis", port=6379, db=0, decode_responses=True)
 APP_HOST = os.getenv("APP_HOST") or "Not found"
 APP_TOKEN = os.getenv("APP_TOKEN") or "Not found"
 
-# PLANFIX
-PLANFIX_USER = os.getenv("PLANFIX_USER") or "Not found"
-PANFIX_API_URL = os.getenv("PANFIX_API_URL") or "Not found"
-PANFIX_AUTH_KEY = os.getenv("PANFIX_AUTH_KEY") or "Not found"
+# CRM
+CRM_USER = os.getenv("CRM_USER") or "Not found"
+CRM_API_URL = os.getenv("CRM_API_URL") or "Not found"
+CRM_AUTH_KEY = os.getenv("CRM_AUTH_KEY") or "Not found"
 
 # TWILIO
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID") or "Not found"
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN") or "Not found"
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER") or "Not found"
+
+# SIP
 SIP_CLIENT_ADDRESS = os.getenv("SIP_CLIENT_ADDRESS") or "Not found"
 
 logging.basicConfig(
@@ -166,8 +168,8 @@ def outgoing_call_status():
         "call_sid": form_data.get("CallSid"),
         "phone": destination_number,
         "ext": ext_name,
-        "planfix_api_url": PANFIX_API_URL,
-        "planfix_auth_key": PANFIX_AUTH_KEY,
+        "planfix_api_url": CRM_API_URL,
+        "planfix_auth_key": CRM_AUTH_KEY,
     }
 
     if call_status == "initiated":
@@ -236,9 +238,9 @@ def incoming_call():
             "from": from_number,
             "call_sid": call_sid,
             "to": to_number,
-            "ext": PLANFIX_USER,
-            "planfix_api_url": PANFIX_API_URL,
-            "planfix_auth_key": PANFIX_AUTH_KEY,
+            "ext": CRM_USER,
+            "planfix_api_url": CRM_API_URL,
+            "planfix_auth_key": CRM_AUTH_KEY,
         }
 
         if call_status == "ringing":
@@ -269,9 +271,9 @@ def incoming_call_status():
         "from": from_number,
         "call_sid": call_sid,
         "to": to_number,
-        "ext": PLANFIX_USER,
-        "planfix_api_url": PANFIX_API_URL,
-        "planfix_auth_key": PANFIX_AUTH_KEY,
+        "ext": CRM_USER,
+        "planfix_api_url": CRM_API_URL,
+        "planfix_auth_key": CRM_AUTH_KEY,
     }
 
     if dial_call_status == "failed":

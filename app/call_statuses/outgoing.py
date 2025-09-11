@@ -22,10 +22,6 @@ def outgoing_call_initiated(data):
 
     url = data["planfix_api_url"]
 
-    print("-------------------------------initiated")
-    print(initiated_data)
-    print("----------------------------------------")
-
     try:
         requests.post(url, data=initiated_data)
     except Exception as e:

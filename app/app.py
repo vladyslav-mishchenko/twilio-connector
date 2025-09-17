@@ -75,7 +75,7 @@ def outgoing_call():
 
     """
 
-    r.flushdb()
+    r.delete("ext_name", "destination_number", "twilio_number")
 
     form_data = request.form
     data = form_data.to_dict()
